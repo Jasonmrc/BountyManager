@@ -274,6 +274,9 @@ function BountyManager:ParseChat(args)
 					local RoughBounty = msg[3]:gsub("%$", "")
 					local RoughBounty = RoughBounty:gsub("%,", "")
 					local Bounty = tonumber(RoughBounty)
+					if Bounty == nil then
+						mySelf:SendChatMessage("Bounty amount must be a number.", FailureColor )
+					return end
 					if Bounty > myMoney then
 						mySelf:SendChatMessage("You only have $" .. self:Commas(myMoney) .. ", you can't afford to set a $" .. self:Commas(Bounty) .. " bounty.", FailureColor )
 					return end
@@ -312,12 +315,24 @@ function BountyManager:ParseChat(args)
 				else
 					mySelf:SendChatMessage(BountyDelElseMessage, NoticeColor )
 				end
+			elseif msg[2] == "stats" then
+				local PlayerBounty		=	self:CheckTotalBounty(mySelf)
+				if PlayerBounty then
+					mySelf:SendChatMessage("You have a $" .. PlayerBounty .. " Bounty on your head!", NoticeColor )
+				else
+					mySelf:SendChatMessage("You do not currently have a Bounty.", NoticeColor )
+				end
+				local PlayerBountyScore	=	self:GetBountyStats(mySelf)
+				if PlayerBountyScore then
+					mySelf:SendChatMessage("Your Bounty Score is: " .. PlayerBountyScore.Claimed .. " Claimed and " .. PlayerBountyScore.Set .. " Set!", NoticeColor )
+				end
 			else
 				mySelf:SendChatMessage("Invalid Command given.", NoticeColor )
 			end
 		else
 			mySelf:SendChatMessage(BountySetElseMessage, NoticeColor )
 			mySelf:SendChatMessage(BountyDelElseMessage, NoticeColor )
+			mySelf:SendChatMessage("Usage: '/bounty stats' To see your Bounty Score.", NoticeColor )
 		end
 	end
 end
