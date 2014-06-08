@@ -9,12 +9,11 @@ function BountyManager:__init()
 	NoticeColor				=	Color(250, 250, 0, 200)	--	The color of information player messages.
 	NotificationColor		=	Color(250, 250, 0, 250)	--	The color of Bounty Set/Claimed/Karma Chat Broadcasts.
 	ChatCommand				=	"bounty"	--	The Chat activation command, prefixed by "/".
-	BountySetElseMessage	=	"Usage: '/" .. ChatCommand .. " <set> <number> <player>'."	--	The message shown if a Bounty Set command is written wrong.
-	BountyDelElseMessage	=	"Usage: '/" .. ChatCommand .. " <del> <player>'."			--	The message shown if a Bounty Delete command is written wrong.
+	BountySetElseMessage	=	"Usage: '/" .. ChatCommand .. " set <amount> <player>'."	--	The message shown if a Bounty Set command is written wrong.
+	BountyDelElseMessage	=	"Usage: '/" .. ChatCommand .. " del <player>'."			--	The message shown if a Bounty Delete command is written wrong.
 	AllowPlayerBountyValues	=	true	--	Allows the system to set Bounty information onto player's values. This is not required, but is useful for having other modules use Bounty information.
 	BountyPopupsEnabled		=	true	--	Shows a popup note by the minimap to all players when a bounty is set or claimed.
-
-	--	Database Creation	--
+	
     SQL:Execute("CREATE TABLE IF NOT EXISTS BountyManager_Bounties (targetname VARCHAR, targetid VARCHAR, settername VARCHAR, setterid VARCHAR, bounty INTEGER)")
     SQL:Execute("CREATE TABLE IF NOT EXISTS BountyManager_PlayerStats (playerid VARCHAR UNIQUE, playername VARCHAR, bountyclaimed INTEGER, bountyset INTEGER)")
 
@@ -48,10 +47,7 @@ function BountyManager:UpdateBountyStats(player, claimedUpdate, setUpdate)
 		ClaimedBounties = 0 + claimedUpdate
 		SetBounties = 0 + setUpdate
 	end
---	print("Updating PlayerName...",PlayerName)
---	print("Updating PlayerSteamID...",PlayerSteamID)
---	print("Updating ClaimedBounties...",ClaimedBounties)
---	print("Updating SetBounties...",SetBounties)
+
 --	1: Player.Id	2: PlayerName		3: BountiesClaimed,	4:	BountiesSet
     self.dbCommand = SQL:Command(self.sqlUpdateBountyStats)
     self.dbCommand:Bind(1, PlayerSteamID)
@@ -71,9 +67,6 @@ function BountyManager:GetBountyStats(player)
     self.qbQuery:Bind(1, PlayerSteamID)
     local result = self.qbQuery:Execute()
     if #result > 0 then
---		print("Recorded Name:",result[1].playername)
---		print("# of Bounties Claimed:",result[1].bountyclaimed)
---		print("# of Bounties Set:",result[1].bountyset)
 		return {
 				Name	=	result[1].playername,
 				Claimed	=	tonumber(result[1].bountyclaimed),
@@ -109,7 +102,7 @@ function BountyManager:BroadcastBountyTable()
 		end
 --		print("Adding " .. PlayerName .. "($" .. PlayerBounty .. ", " .. PlayerBountyScore[2] .. "/" .. PlayerBountyScore[3] .. ")...")
 	end
-	print("Bounty Information Broadcast.")
+--	print("Bounty Information Broadcast.")
 	Events:Fire("PluginBountyManagerBroadcast", BountyTable)
 end
 
@@ -280,10 +273,8 @@ function BountyManager:ParseChat(args)
 					if Bounty > myMoney then
 						mySelf:SendChatMessage("You only have $" .. self:Commas(myMoney) .. ", you can't afford to set a $" .. self:Commas(Bounty) .. " bounty.", FailureColor )
 					return end
-					AffectedPlayer = self:GetPlayerByTableInput(msg, 3)
-					if not IsValid(AffectedPlayer) then
-						mySelf:SendChatMessage("'" .. AffectedPlayer .. "' doesn't exist.", NoticeColor )
-					return end
+					AffectedPlayer = self:GetPlayerByTableInput(msg, 3, mySelf)
+					if not IsValid(AffectedPlayer) then return end
 					if self:CheckBounty(AffectedPlayer, mySelf) then
 						local Bounty = tonumber(self:CheckBounty(AffectedPlayer, mySelf))
 						mySelf:SendChatMessage("You have already set a bounty of $" .. self:Commas(Bounty) .. " on " .. AffectedPlayer:GetName() .. ".", NoticeColor )
@@ -298,10 +289,8 @@ function BountyManager:ParseChat(args)
 				end
 			elseif msg[2] == "del" then
 				if table.count(msg) >= 3 then
-					AffectedPlayer = self:GetPlayerByTableInput(msg, 2)
-					if not IsValid(AffectedPlayer) then
-						mySelf:SendChatMessage("'" .. AffectedPlayer .. "' doesn't exist.", FailureColor )
-					return end
+					AffectedPlayer = self:GetPlayerByTableInput(msg, 2, mySelf)
+					if not IsValid(AffectedPlayer) then return end
 					local Bounty = tonumber(self:CheckBounty(AffectedPlayer, mySelf))
 					if Bounty then
 						mySelf:SetMoney(mySelf:GetMoney() + Bounty)
@@ -337,7 +326,7 @@ function BountyManager:ParseChat(args)
 	end
 end
 
-function BountyManager:GetPlayerByTableInput(tableinput,number)
+function BountyManager:GetPlayerByTableInput(tableinput, number, requester)
 	local number = tonumber(number)
 --	print("Drop " .. number .. " table entries.")
 	local i = 1
@@ -355,19 +344,32 @@ function BountyManager:GetPlayerByTableInput(tableinput,number)
 		names = names .. " " .. v
 --		print("Name: " .. names)
 	end
-		PlayerFullNameObject = names:gsub("^%s*(.-)%s*$", "%1")
---		print("Full Name: |" .. PlayerFullNameObject.."|")
-	if PlayerFullNameObject ~= nil then
+	local PlayerFullNameObject = names:gsub("^%s*(.-)%s*$", "%1")
+--	print("Full Name: |" .. PlayerFullNameObject.."|")
+	if PlayerFullNameObject then
 		for p in Server:GetPlayers() do
---		print(p)
 			if PlayerFullNameObject == p:GetName() then
 				return p
 			end
 		end
-		return PlayerFullNameObject
-	else
-	return "Nothing"
 	end
+	--	Attempt to find a name by partial match.
+	local MatchAttempt	=	Player.Match(PlayerFullNameObject)
+	if table.count(MatchAttempt) > 0 then
+		if table.count(MatchAttempt) > 1 then
+			local NamesString	=	""
+			for _, possibleplayers in ipairs(MatchAttempt) do
+				NamesString = NamesString .. possibleplayers:GetName() .. ", "
+			end
+			requester:SendChatMessage("There is more than one player with '" .. PlayerFullNameObject .. "' in their name, please type their full name for clarity.", NoticeColor)
+			requester:SendChatMessage("Candidates: " .. NamesString, NoticeColor)
+			return false
+		else
+			return MatchAttempt[1]
+		end
+	end
+	requester:SendChatMessage("No player found with the name '" .. PlayerFullNameObject .. "'. Please try typing part of their name and then hitting the TAB key to auto-complete it.", NoticeColor)
+	return false
 end
 
 function BountyManager:EmptyFunction()
