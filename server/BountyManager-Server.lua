@@ -266,6 +266,7 @@ function BountyManager:ParseChat(args)
 					return end
 					local RoughBounty = msg[3]:gsub("%$", "")
 					local RoughBounty = RoughBounty:gsub("%,", "")
+					local RoughBounty = RoughBounty:gsub("-", "")
 					local Bounty = tonumber(RoughBounty)
 					if Bounty == nil then
 						mySelf:SendChatMessage("Bounty amount must be a number.", FailureColor )
