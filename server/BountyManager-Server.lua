@@ -23,6 +23,7 @@ function BountyManager:__init()
     self.sqlRemoveBounty			= 	"DELETE FROM BountyManager_Bounties WHERE targetid = (?)"
     self.sqlCheckBounty				= 	"SELECT bounty FROM BountyManager_Bounties WHERE targetid = (?) AND setterid = (?)"
     self.sqlCheckTotalBounty		= 	"SELECT targetname, targetid, settername, setterid, bounty FROM BountyManager_Bounties WHERE targetid = (?)"
+	self.sqlCheckTotalBountySet	= 	"SELECT targetname, targetid, settername, setterid, bounty FROM BountyManager_Bounties WHERE settername = (?) or setterid = (?)"
 
 	--	Stat Commands	--
     self.sqlGetBountyStats			= 	"SELECT playername, bountyclaimed, bountyset FROM BountyManager_PlayerStats WHERE playerid = (?)"
@@ -72,6 +73,19 @@ function BountyManager:GetBountyStats(player)
 				Claimed	=	tonumber(result[1].bountyclaimed),
 				Set		=	tonumber(result[1].bountyset)
 				}
+	end
+	return false
+end
+
+function BountyManager:GetExtendedBountyStats(player)
+	local PlayerName	=	player:GetName()
+	local PlayerSteamID	=	player:GetSteamId().id
+    self.qbQuery = SQL:Query(self.sqlCheckTotalBountySet)
+    self.qbQuery:Bind(1, PlayerName)
+	self.qbQuery:Bind(2, PlayerSteamID)
+    local result = self.qbQuery:Execute()
+    if #result > 0 then
+		return result
 	end
 	return false
 end
@@ -316,13 +330,24 @@ function BountyManager:ParseChat(args)
 				if PlayerBountyScore then
 					mySelf:SendChatMessage("Your Bounty Score is: " .. PlayerBountyScore.Claimed .. " Claimed and " .. PlayerBountyScore.Set .. " Set!", NoticeColor )
 				end
+			elseif msg[2] == "exstats" then
+				local PlayerStats = self:GetExtendedBountyStats(mySelf)
+				if PlayerStats != false then 
+					mySelf:SendChatMessage(AlertBracket .. " You have set a bounty on the following people: " .. AlertBracket, NoticeColor )
+					for i = 1, #PlayerStats do
+						mySelf:SendChatMessage(PlayerStats[i].targetname .. " : $" .. PlayerStats[i].bounty, NoticeColor )
+					end
+				else
+					mySelf:SendChatMessage("There is nothing to show.", NoticeColor )
+				end
 			else
 				mySelf:SendChatMessage("Invalid Command given.", NoticeColor )
 			end
 		else
 			mySelf:SendChatMessage(BountySetElseMessage, NoticeColor )
 			mySelf:SendChatMessage(BountyDelElseMessage, NoticeColor )
-			mySelf:SendChatMessage("Usage: '/bounty stats' To see your Bounty Score.", NoticeColor )
+			mySelf:SendChatMessage("Usage: '/bounty stats' to see your Bounty Score.", NoticeColor )
+			mySelf:SendChatMessage("Usage: '/bounty exstats' to see the bounties set by you.", NoticeColor )
 		end
 	end
 end
