@@ -23,6 +23,8 @@ function BountyManager:__init()
     self.sqlRemoveBounty			= 	"DELETE FROM BountyManager_Bounties WHERE targetid = (?)"
     self.sqlCheckBounty				= 	"SELECT bounty FROM BountyManager_Bounties WHERE targetid = (?) AND setterid = (?)"
     self.sqlCheckTotalBounty		= 	"SELECT targetname, targetid, settername, setterid, bounty FROM BountyManager_Bounties WHERE targetid = (?)"
+	self.sqlCheckTotalBountySet	= 	"SELECT targetname, targetid, settername, setterid, bounty FROM BountyManager_Bounties WHERE settername = (?) or setterid = (?) LIMIT 11"
+	self.sqlCheckTotalBountySetPage	= 	"SELECT targetname, targetid, settername, setterid, bounty FROM BountyManager_Bounties WHERE settername = (?) or setterid = (?) LIMIT 10 OFFSET (?)"
 
 	--	Stat Commands	--
     self.sqlGetBountyStats			= 	"SELECT playername, bountyclaimed, bountyset FROM BountyManager_PlayerStats WHERE playerid = (?)"
@@ -72,6 +74,33 @@ function BountyManager:GetBountyStats(player)
 				Claimed	=	tonumber(result[1].bountyclaimed),
 				Set		=	tonumber(result[1].bountyset)
 				}
+	end
+	return false
+end
+
+function BountyManager:GetExtendedBountyStats(player)
+	local PlayerName	=	player:GetName()
+	local PlayerSteamID	=	player:GetSteamId().id
+    self.qbQuery = SQL:Query(self.sqlCheckTotalBountySet)
+    self.qbQuery:Bind(1, PlayerName)
+	self.qbQuery:Bind(2, PlayerSteamID)
+    local result = self.qbQuery:Execute()
+    if #result > 0 then
+		return result
+	end
+	return false
+end
+
+function BountyManager:GetExtendedBountyStatsPages(player, page)
+	local PlayerName	=	player:GetName()
+	local PlayerSteamID	=	player:GetSteamId().id
+    self.qbQuery = SQL:Query(self.sqlCheckTotalBountySetPage)
+    self.qbQuery:Bind(1, PlayerName)
+	self.qbQuery:Bind(2, PlayerSteamID)
+	self.qbQuery:Bind(3, (tonumber(page)*10))
+    local result = self.qbQuery:Execute()
+    if #result > 0 then
+		return result
 	end
 	return false
 end
@@ -316,13 +345,35 @@ function BountyManager:ParseChat(args)
 				if PlayerBountyScore then
 					mySelf:SendChatMessage("Your Bounty Score is: " .. PlayerBountyScore.Claimed .. " Claimed and " .. PlayerBountyScore.Set .. " Set!", NoticeColor )
 				end
+			elseif msg[2] == "exstats" then
+				if msg[3] != false and msg[3] != nil then
+					PlayerStatPage = tonumber(msg[3])
+					PlayerStats = self:GetExtendedBountyStatsPages(mySelf, PlayerStatPage - 1)
+				else 
+					PlayerStatPage = 1
+					PlayerStats = self:GetExtendedBountyStats(mySelf)
+				end
+				if PlayerStats != false then 
+					mySelf:SendChatMessage(AlertBracket .. " Bounties set by you. Page " .. PlayerStatPage .. " " .. AlertBracket, NoticeColor )
+					for i = 1, #PlayerStats do
+						if i == 11 then
+							mySelf:SendChatMessage("Say /bounty exstats " .. (PlayerStatPage + 1) .." to get the next page", NoticeColor )
+							break
+						else
+							mySelf:SendChatMessage(i .. ". " .. PlayerStats[i].targetname .. " : $" .. PlayerStats[i].bounty, NoticeColor )
+						end
+					end
+				else
+					mySelf:SendChatMessage("There is nothing to show.", NoticeColor )
+				end
 			else
 				mySelf:SendChatMessage("Invalid Command given.", NoticeColor )
 			end
 		else
 			mySelf:SendChatMessage(BountySetElseMessage, NoticeColor )
 			mySelf:SendChatMessage(BountyDelElseMessage, NoticeColor )
-			mySelf:SendChatMessage("Usage: '/bounty stats' To see your Bounty Score.", NoticeColor )
+			mySelf:SendChatMessage("Usage: '/bounty stats' to see your Bounty Score.", NoticeColor )
+			mySelf:SendChatMessage("Usage: '/bounty exstats' to see the bounties set by you.", NoticeColor )
 		end
 	end
 end
